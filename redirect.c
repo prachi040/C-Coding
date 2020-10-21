@@ -27,7 +27,7 @@ int main( int argc, char* argv[] ) {
     }
 
     // open output file
-    int outFd = open(outFilePath, O_CREAT|O_WRONLY|O_APPEND, 0644 );
+    int outFd = open(outFilePath, O_CREAT|O_RDWR|O_APPEND, 0644 );
     if ( outFd < 0 ) {
         fprintf(stderr, "Failed to open file(%s), return status: %d(%s)\n", outFilePath, errno, strerror(errno));
         return -1;
