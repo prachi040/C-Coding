@@ -14,8 +14,11 @@
 #include <errno.h>
 #include <sys/epoll.h>
 #include <stdbool.h>
+#include <stdlib.h>
 
-#define BUFFER_SIZE 1024
+#define MAX_BLOCK_SIZE 10240
+#define MIN_BLOCK_SIZE 512
+#define BLK_OVERFLOW_THRESHOLD 3
 
 int main( int argc, char* argv[] ) {
 
@@ -62,7 +65,11 @@ int main( int argc, char* argv[] ) {
     }
 
 
-    char buffer[BUFFER_SIZE];
+    unsigned int size = MIN_BLOCK_SIZE;
+    char *buffer = NULL;
+    bool doRealloc = false;
+    unsigned char bufIncCounter = 0;
+
     struct epoll_event events;
     memset(&events, sizeof(struct epoll_event), 0);
 
@@ -87,8 +94,41 @@ int main( int argc, char* argv[] ) {
                 continue;
             }
 
+            // Allocate/Adjust buffer
+            if ( !buffer || doRealloc ) {
+                void* ptr = realloc( buffer, size );
+                if ( !ptr ) {
+                    fprintf( stderr, "Error: Realloc failed, %d(%s)\n", errno, strerror(errno) );
+                    if ( !buffer ) {
+                        close( outFd );
+                        close( epollFd );
+                        return -1;
+                    }
+                } else {
+                    buffer = ptr;
+                }
+
+                memset( buffer, 0, size );
+                bufIncCounter = 0;
+                doRealloc = false;
+            }
+
             //read
-            int bytes = fread( buffer, 1, BUFFER_SIZE, stdin );
+            int bytes = fread( buffer, 1, size, stdin );
+
+            if ( bytes == size && size < MAX_BLOCK_SIZE )
+                bufIncCounter++;
+            else
+                bufIncCounter = 0;
+
+            // Adjust buffer size
+            if ( bufIncCounter == BLK_OVERFLOW_THRESHOLD ) {
+                doRealloc = true;
+                size = 2*size;
+                if ( size > MAX_BLOCK_SIZE ) {
+                    size = MAX_BLOCK_SIZE;
+                }
+            }
 
             int offset = 0;
             //write
